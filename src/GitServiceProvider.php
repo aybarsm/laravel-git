@@ -17,7 +17,7 @@ class GitServiceProvider extends ServiceProvider
             __DIR__.'/../config/git.php' => config_path('git.php'),
         ], 'config');
 
-        $this->app->singleton(Git::class, function ($app) {
+        $this->app->singleton('git', function ($app) {
             return new Git(
                 config('git.top_level', getcwd())
             );

@@ -117,7 +117,7 @@ class Git
         $cmd .= 'echo "NAME[]=$name&SHA1[]=$sha1&PATH[]=$path&BRANCH[]=$(git symbolic-ref --short HEAD)&';
         $cmd .= 'TAG[]=$(git describe --tags 2>/dev/null)&DIRTY[]=$(git diff --quiet || echo "1")"\'';
 
-        $output = trim(Str::replaceLines($this->run($cmd), '&'), '&');
+        $output = trim(Str::replaceLines($this->run($cmd, '', ProcessReturnType::OUTPUT), '&'), '&');
 
         parse_str($output, $parsed);
 
