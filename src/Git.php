@@ -3,7 +3,6 @@
 namespace Aybarsm\Laravel\Git;
 
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
-use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -24,7 +23,7 @@ class Git
         return realpath(pathDir($this->topLevel).(! empty($path) ? pathDir($path) : ''));
     }
 
-    public function run(string $cmd, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function run(string $cmd, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $cmd = 'git '.trim(ltrim(Str::cleanWhitespace($cmd), 'git'));
         $process = Process::path($this->getRealPath($path))->run($cmd);
@@ -42,41 +41,70 @@ class Git
         return $this->run('diff --quiet || echo "1"', $path) === '1';
     }
 
-    public function getBranch(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function getBranch(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         return $this->run('symbolic-ref --short HEAD', $path, $returnAs);
     }
 
-    public function getTag(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function getTag(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         return $this->run('describe --tags 2>/dev/null', $path, $returnAs);
     }
 
-    public function setTag(string $tag, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function setTag(string $tag, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         return $this->run("tag {$tag}", $path, $returnAs);
     }
 
-    public function push(string $path = '', string $remote = 'origin', string $branch = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
-    {
-        $branch = empty($branch) ? $this->getBranch($path) : $branch;
-
-        return $this->run("push {$remote} {$branch}", $path, $returnAs);
-    }
-
-    public function add(string $path = '', string $args = '. --all', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function add(string $path = '', string $args = '. --all', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         return $this->run("add {$args}", $path, $returnAs);
     }
 
-    public function commit(string $path = '', string $message = '', string $more = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function commit(string $path = '', string $message = '', string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
-        $cmd = 'commit '.(! empty($message) ? "-m \"{$message}\" " : '').$more;
+        $cmd = 'commit '.(! empty($message) ? "-m \"{$message}\" " : '').$args;
 
         return $this->run($cmd, $path, $returnAs);
     }
 
-    public function checkout(string $path = '', string $branch = '', string $flags = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function push(string $path = '', string $remote = 'origin', string $branch = '', string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    {
+        $branch = empty($branch) ? $this->getBranch($path) : $branch;
+
+        return $this->run("push {$args} {$remote} {$branch}", $path, $returnAs);
+    }
+
+    public function addCommitPush(
+        string $path = '',
+        string $addArgs = '. --all',
+        string $commitMessage = '',
+        string $commitArgs = '',
+        string $pushRemote = 'origin',
+        string $pushBranch = '',
+        string $pushArgs = '',
+        ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT
+    ): object {
+        $resultAdd = $this->add($path, $addArgs, ProcessReturnType::INSTANCE);
+        if ($resultAdd->failed()) {
+            return process_return($resultAdd, $returnAs);
+        }
+
+        $resultCommit = $this->commit($path, $commitMessage, $commitArgs, ProcessReturnType::INSTANCE);
+        if ($resultCommit->failed()) {
+            return process_return($resultCommit, $returnAs);
+        }
+
+        $resultPush = $this->push($path, $pushRemote, $pushBranch, $pushArgs, ProcessReturnType::INSTANCE);
+
+        return Arr::toObject([
+            'add' => process_return($resultAdd, $returnAs),
+            'commit' => process_return($resultCommit, $returnAs),
+            'push' => process_return($resultPush, $returnAs),
+        ]);
+    }
+
+    public function checkout(string $path = '', string $branch = '', string $flags = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $branch = empty($branch) ? $this->getBranch($path) : $branch;
 
@@ -124,7 +152,7 @@ class Git
     /**
      * @throws \Throwable
      */
-    public function updateSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function updateSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $this->validateSubmodule($path);
 
@@ -134,7 +162,7 @@ class Git
     /**
      * @throws \Throwable
      */
-    public function initSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function initSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $this->validateSubmodule($path);
 
@@ -144,7 +172,7 @@ class Git
     /**
      * @throws \Throwable
      */
-    public function deinitSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function deinitSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $this->validateSubmodule($path);
 
@@ -154,7 +182,7 @@ class Git
     /**
      * @throws \Throwable
      */
-    public function removeSubmodule(string $path, ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function removeSubmodule(string $path, ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         $this->validateSubmodule($path);
 
@@ -173,7 +201,7 @@ class Git
     /**
      * @throws \Throwable
      */
-    public function addSubmodule(string $url, string $path, string $args = '', bool $initSuccessful = true, ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): bool|string|ProcessResult
+    public function addSubmodule(string $url, string $path, string $args = '', bool $initSuccessful = true, ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         throw_if(! Str::isUrl($url), \InvalidArgumentException::class, "Repo url [{$url}] is invalid.");
 
