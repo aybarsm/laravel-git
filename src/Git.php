@@ -202,18 +202,30 @@ class Git
      * @throws \Throwable
      */
     // Divide this function as addInitSubmodule
-    public function addSubmodule(string $url, string $path, string $args = '', bool $initSuccessful = true, ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    public function addSubmodule(string $url, string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         throw_if(! Str::isUrl($url), \InvalidArgumentException::class, "Repo url [{$url}] is invalid.");
 
         throw_if(File::exists($this->getRealPath($path)), \InvalidArgumentException::class, "Submodule path [{$path}] already exists.");
 
-        $resultAdd = $this->run("submodule add {$args} {$url} {$path}", '', $initSuccessful ? ProcessReturnType::SUCCESSFUL : $returnAs);
+        return $this->run("submodule add {$args} {$url} {$path}", '', $returnAs);
+    }
 
-        if (! $initSuccessful || $resultAdd === false) {
-            return $resultAdd;
+    /**
+     * @throws \Throwable
+     */
+    public function addInitSubmodule(string $url, string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    {
+        $resultAdd = $this->addSubmodule($url, $path, $args, ProcessReturnType::INSTANCE);
+        if ($resultAdd->failed()) {
+            return process_return($resultAdd, $returnAs);
         }
 
-        return $this->updateSubmodule($path, '--init', $returnAs);
+        $resultInit = $this->updateSubmodule($path, '--init', ProcessReturnType::INSTANCE);
+
+        return Arr::toObject([
+            'add' => process_return($resultAdd, $returnAs),
+            'init' => process_return($resultInit, $returnAs),
+        ]);
     }
 }
