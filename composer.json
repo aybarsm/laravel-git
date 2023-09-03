@@ -1,0 +1,49 @@
+{
+    "name": "aybarsm/laravel-git",
+    "description": "Laravel service provider package to manage git repo within the Laravel application",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "aybarsm",
+        "laravel",
+        "git",
+        "submodule",
+        "mixins",
+        "management"
+    ],
+    "homepage": "https://github.com/aybarsm/laravel-git",
+    "authors": [
+        {
+            "name": "Murat Aybars",
+            "email": "hello@aybarsm.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "laravel/framework": "^10.0",
+        "aybarsm/laravel-extended-support": "dev-main"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.12"
+    },
+    "autoload": {
+        "psr-4": {
+            "Aybarsm\\Laravel\\Git\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Aybarsm\\Laravel\\Git\\GitServiceProvider"
+            ],
+            "aliases": {
+                "ExtendedSupport": "Aybarsm\\Laravel\\Git\\Facades\\Git"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
