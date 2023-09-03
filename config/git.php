@@ -1,5 +1,5 @@
 <?php
 
 return [
-    'top_level' => getcwd(),
+    'top_level' => base_path(),
 ];
