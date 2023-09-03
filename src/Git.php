@@ -201,7 +201,6 @@ class Git
     /**
      * @throws \Throwable
      */
-    // Divide this function as addInitSubmodule
     public function addSubmodule(string $url, string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         throw_if(! Str::isUrl($url), \InvalidArgumentException::class, "Repo url [{$url}] is invalid.");
