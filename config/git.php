@@ -1,5 +1,5 @@
 <?php
 
 return [
-    'top_level' => base_path(),
+    'top_level' => base_path()
 ];
