@@ -33,20 +33,20 @@ class Git
 
     public function isRepoReady(string $path = ''): bool
     {
-        return $this->run('rev-parse --is-inside-work-tree', $path) === 'true';
+        return $this->run('rev-parse --is-inside-work-tree', $path, ProcessReturnType::OUTPUT) === 'true';
     }
 
     public function isDirty(string $path = ''): bool
     {
-        return $this->run('diff --quiet || echo "1"', $path) === '1';
+        return $this->run('diff --quiet || echo "1"', $path, ProcessReturnType::OUTPUT) === '1';
     }
 
-    public function getBranch(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    public function getBranch(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): mixed
     {
         return $this->run('symbolic-ref --short HEAD', $path, $returnAs);
     }
 
-    public function getTag(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    public function getTag(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): mixed
     {
         return $this->run('describe --tags 2>/dev/null', $path, $returnAs);
     }
@@ -146,7 +146,7 @@ class Git
 
     public function isSubmodule(string $path): bool
     {
-        return $this->run('rev-parse --show-superproject-working-tree', $path) !== '';
+        return $this->run('rev-parse --show-superproject-working-tree', $path, ProcessReturnType::OUTPUT) !== '';
     }
 
     /**
@@ -201,6 +201,7 @@ class Git
     /**
      * @throws \Throwable
      */
+    // Divide this function as addInitSubmodule
     public function addSubmodule(string $url, string $path, string $args = '', bool $initSuccessful = true, ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
     {
         throw_if(! Str::isUrl($url), \InvalidArgumentException::class, "Repo url [{$url}] is invalid.");
