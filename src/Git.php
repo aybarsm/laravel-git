@@ -3,6 +3,7 @@
 namespace Aybarsm\Laravel\Git;
 
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
+use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -13,218 +14,116 @@ class Git
 {
     use Macroable;
 
+    protected static array $repos = [];
+
+    protected ProcessResult $processResult;
+
     public function __construct(
-        public readonly string $topLevel
+        protected $repoProvider,
+        protected array $repoList
     ) {
+
     }
 
-    public function getRealPath(string $path = ''): string
+    public function run(string $path, string $command, string|array $args, string $subCommand = null, ProcessReturnType $returnAs = ProcessReturnType::SUCCESSFUL): mixed
     {
-        return realpath(pathDir($this->topLevel).(! empty($path) ? pathDir($path) : ''));
-    }
+        $command = trim(ltrim(Str::cleanWhitespace(Str::kebab($command)), 'git'));
 
-    public function run(string $cmd, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $cmd = 'git '.trim(ltrim(Str::cleanWhitespace($cmd), 'git'));
-        $process = Process::path($this->getRealPath($path))->run($cmd);
+        if ($subCommand !== null) {
+            $subCommand = trim(Str::cleanWhitespace($subCommand));
+            $subCommands = config("git.commands.{$command}.subcommands", []);
+            $prefixes = config("git.commands.{$command}.subcommand_prefixes", []);
+            $available = count($prefixes) ? Arr::map(Arr::crossJoin($prefixes, $subCommands), fn ($val, $key) => Str::cleanWhitespace(Arr::join($val, ' '))) : $subCommands;
 
-        return process_return($process, $returnAs);
-    }
+            throw_if(
+                ! in_array($subCommand, $available),
+                \InvalidArgumentException::class,
+                "Subcommand [{$subCommand}] is not in command [{$command}] available list."
+            );
 
-    public function isRepoReady(string $path = ''): bool
-    {
-        return $this->run('rev-parse --is-inside-work-tree', $path, ProcessReturnType::OUTPUT) === 'true';
-    }
-
-    public function isDirty(string $path = ''): bool
-    {
-        return $this->run('diff --quiet || echo "1"', $path, ProcessReturnType::OUTPUT) === '1';
-    }
-
-    public function getBranch(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): mixed
-    {
-        return $this->run('symbolic-ref --short HEAD', $path, $returnAs);
-    }
-
-    public function getTag(string $path = '', ProcessReturnType $returnAs = ProcessReturnType::OUTPUT): mixed
-    {
-        return $this->run('describe --tags 2>/dev/null', $path, $returnAs);
-    }
-
-    public function setTag(string $tag, string $path = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        return $this->run("tag {$tag}", $path, $returnAs);
-    }
-
-    public function add(string $path = '', string $args = '. --all', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        return $this->run("add {$args}", $path, $returnAs);
-    }
-
-    public function commit(string $path = '', string $message = '', string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $cmd = 'commit '.(! empty($message) ? "-m \"{$message}\" " : '').$args;
-
-        return $this->run($cmd, $path, $returnAs);
-    }
-
-    public function push(string $path = '', string $remote = 'origin', string $branch = '', string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $branch = empty($branch) ? $this->getBranch($path) : $branch;
-
-        return $this->run("push {$args} {$remote} {$branch}", $path, $returnAs);
-    }
-
-    public function addCommitPush(
-        string $path = '',
-        string $addArgs = '. --all',
-        string $commitMessage = '',
-        string $commitArgs = '',
-        string $pushRemote = 'origin',
-        string $pushBranch = '',
-        string $pushArgs = '',
-        ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT
-    ): object {
-        $resultAdd = $this->add($path, $addArgs, ProcessReturnType::INSTANCE);
-        if ($resultAdd->failed()) {
-            return process_return($resultAdd, $returnAs);
+            $command .= " {$subCommand}";
         }
 
-        $resultCommit = $this->commit($path, $commitMessage, $commitArgs, ProcessReturnType::INSTANCE);
-        if ($resultCommit->failed()) {
-            return process_return($resultCommit, $returnAs);
+        $path = realpath(pathDir($path));
+        $command = "git {$command}";
+        $args = $this->buildArgs($args);
+
+        $result = Process::path($path)->run("{$command} {$args}");
+
+        return process_return($result, $returnAs);
+    }
+
+    protected function buildArgs(string|array $args): string
+    {
+        if (is_string($args)) {
+            return Str::cleanWhitespace($args);
         }
 
-        $resultPush = $this->push($path, $pushRemote, $pushBranch, $pushArgs, ProcessReturnType::INSTANCE);
-
-        return Arr::toObject([
-            'add' => process_return($resultAdd, $returnAs),
-            'commit' => process_return($resultCommit, $returnAs),
-            'push' => process_return($resultPush, $returnAs),
-        ]);
-    }
-
-    public function checkout(string $path = '', string $branch = '', string $flags = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $branch = empty($branch) ? $this->getBranch($path) : $branch;
-
-        return $this->run("checkout {$flags} {$branch}", $path, $returnAs);
-    }
-
-    public function getAllSubmodules(): \Illuminate\Support\Collection
-    {
-        $cmd = "submodule --quiet foreach --recursive '";
-        $cmd .= 'echo "NAME[]=$name&SHA1[]=$sha1&PATH[]=$path&BRANCH[]=$(git symbolic-ref --short HEAD)&';
-        $cmd .= 'TAG[]=$(git describe --tags 2>/dev/null)&DIRTY[]=$(git diff --quiet || echo "1")"\'';
-
-        $output = trim(Str::replaceLines($this->run($cmd, '', ProcessReturnType::OUTPUT), '&'), '&');
-
-        parse_str($output, $parsed);
-
-        $rtr = Arr::map($parsed['NAME'], function ($val, $key) use ($parsed) {
-            return [
-                'name' => $val,
-                'path' => $parsed['PATH'][$key],
-                'branch' => $parsed['BRANCH'][$key],
-                'dirty' => boolval($parsed['DIRTY'][$key]),
-                'tag' => empty($parsed['TAG'][$key]) ? null : $parsed['TAG'][$key],
-                'sha' => $parsed['SHA1'][$key],
-            ];
-        });
-
-        return collect($rtr);
-    }
-
-    /**
-     * @throws \Throwable
-     */
-    private function validateSubmodule(string $path): void
-    {
-        throw_if(! File::exists($this->getRealPath($path)), \InvalidArgumentException::class, "Submodule path [{$path}] does not exist.");
-        throw_if(! $this->isSubmodule($path), \InvalidArgumentException::class, "Path [{$path}] is not a submodule.");
-    }
-
-    public function isSubmodule(string $path): bool
-    {
-        return $this->run('rev-parse --show-superproject-working-tree', $path, ProcessReturnType::OUTPUT) !== '';
-    }
-
-    /**
-     * @throws \Throwable
-     */
-    public function updateSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $this->validateSubmodule($path);
-
-        return $this->run("submodule update {$args} {$path}", '', $returnAs);
-    }
-
-    /**
-     * @throws \Throwable
-     */
-    public function initSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $this->validateSubmodule($path);
-
-        return $this->run("submodule init {$args} {$path}", '', $returnAs);
-    }
-
-    /**
-     * @throws \Throwable
-     */
-    public function deinitSubmodule(string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $this->validateSubmodule($path);
-
-        return $this->run("submodule deinit {$args} {$path}", '', $returnAs);
-    }
-
-    /**
-     * @throws \Throwable
-     */
-    public function removeSubmodule(string $path, ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
-    {
-        $this->validateSubmodule($path);
-
-        $resultDeinit = $this->deinitSubmodule($path, '-f', ProcessReturnType::INSTANCE);
-        if ($resultDeinit->failed()) {
-            return process_return($resultDeinit, $returnAs);
+        $built = [];
+        foreach ($args as $arg => $val) {
+            $built[] = match (true) {
+                Str::startsWith($arg, '--') => $arg.(! empty($val) ? "={$val}" : ''),
+                Str::startsWith($arg, '-') => $arg.(! empty($val) ? " {$val}" : ''),
+                default => $val
+            };
         }
 
-        if (! File::deleteDirectory($this->getRealPath(".git/modules/{$path}"))) {
-            return false;
-        }
-
-        return $this->run("rm -f {$path}", '', $returnAs);
+        return Str::cleanWhitespace(implode(' ', $built));
     }
 
     /**
      * @throws \Throwable
      */
-    public function addSubmodule(string $url, string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    public function addRepo(string $name, string $path, bool $replace = false): static
     {
-        throw_if(! Str::isUrl($url), \InvalidArgumentException::class, "Repo url [{$url}] is invalid.");
+        throw_if(Arr::exists(static::$repos, $name) && $replace === false, \InvalidArgumentException::class, "Repo [{$name}] already exists.");
+        throw_if(! File::isDirectory($relPath = realpath("{$path}/..")), \InvalidArgumentException::class, "Path [{$relPath}] is not a directory.");
 
-        throw_if(File::exists($this->getRealPath($path)), \InvalidArgumentException::class, "Submodule path [{$path}] already exists.");
+        static::$repos[$name] = new $this->repoProvider($name, realpath($path));
 
-        return $this->run("submodule add {$args} {$url} {$path}", '', $returnAs);
+        return $this;
+    }
+
+    public function reLoadRepos(): void
+    {
+        foreach ($this->repoList as $name => $path) {
+            $this->addRepo($name, $path, true);
+            $this->repo($name)->buildSubmodules();
+        }
+    }
+
+    public function repo(string $name = 'default')
+    {
+        return static::$repos[$name] ?? null;
+    }
+
+    public function getRepoProvider(): mixed
+    {
+        return $this->repoProvider;
     }
 
     /**
      * @throws \Throwable
      */
-    public function addInitSubmodule(string $url, string $path, string $args = '', ProcessReturnType $returnAs = ProcessReturnType::ALL_OUTPUT): mixed
+    public function clone(string $repoUrl, string $path, array|string $args): mixed
     {
-        $resultAdd = $this->addSubmodule($url, $path, $args, ProcessReturnType::INSTANCE);
-        if ($resultAdd->failed()) {
-            return process_return($resultAdd, $returnAs);
-        }
+        throw_if(! Str::isUrl($repoUrl), \InvalidArgumentException::class, "Url [{$repoUrl}] is invalid");
+        $path = realpath($path);
+        throw_if(! File::isDirectory($baseDir = realpath("{$path}/..")), \InvalidArgumentException::class, "Path [{$baseDir}] is not a directory.");
+        throw_if(File::exists($path), \InvalidArgumentException::class, "Path [{$path}] already exists.");
 
-        $resultInit = $this->updateSubmodule($path, '--init', ProcessReturnType::INSTANCE);
+        $args = is_array($args) ? array_merge($args, [$repoUrl, $path]) : "{$args} {$repoUrl} {$path}";
 
-        return Arr::toObject([
-            'add' => process_return($resultAdd, $returnAs),
-            'init' => process_return($resultInit, $returnAs),
-        ]);
+        return $this->run(base_path(), 'clone', $args) ? new $this->repoProvider($path, $path) : null;
+    }
+
+    public function help(array|string $args = ''): string
+    {
+        $this->run(base_path(), 'help', $args, null, ProcessReturnType::OUTPUT);
+    }
+
+    public function version(array|string $args = ''): string
+    {
+        $this->run(base_path(), 'version', $args, null, ProcessReturnType::OUTPUT);
     }
 }

@@ -18,10 +18,15 @@ class GitServiceProvider extends ServiceProvider
         ], 'config');
 
         $this->app->singleton('git', function ($app) {
-            return new Git(
-                config('git.top_level', getcwd())
+            $gitProvider = config('git.providers.git', \Aybarsm\Laravel\Git\Git::class);
+
+            return new $gitProvider(
+                config('git.providers.gitRepo', \Aybarsm\Laravel\Git\GitRepo::class),
+                config('git.repos')
             );
         });
+
+        $this->app->booted(fn ($app) => app('git')->reLoadRepos());
     }
 
     public function boot(): void

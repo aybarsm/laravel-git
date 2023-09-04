@@ -1,0 +1,769 @@
+<?php
+
+namespace Aybarsm\Laravel\Git;
+
+use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
+use Illuminate\Process\ProcessResult;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Macroable;
+
+class GitRepo
+{
+    use Macroable;
+
+    protected static Collection $submodules;
+
+    protected ?ProcessResult $processResult = null;
+
+    public function __construct(
+        public readonly string $name,
+        public readonly string $path
+    ) {
+        static::$submodules = collect();
+    }
+
+    public function ok(): ?static
+    {
+        return $this->processResult?->successful() ? $this : null;
+    }
+
+    public function subs(string $search = ''): Collection
+    {
+        return empty($subs) ?
+            static::$submodules :
+            static::$submodules->filter(fn ($item) => Str::contains($item->name, $search, true) || Str::contains($item->path, $search, true));
+    }
+
+    public function sub(string $search): mixed
+    {
+        return static::$submodules->filter(fn ($item) => Str::contains($item->name, $search, true) || Str::contains($item->path, $search, true))->first();
+    }
+
+    public function getProcessResult(): ?ProcessResult
+    {
+        return $this->processResult;
+    }
+
+    public function getOutput(): ?string
+    {
+        return Str::removeEmptyLines($this->processResult?->output());
+    }
+
+    public function ready(): bool
+    {
+        return $this->revParse('--is-inside-work-tree')->ok()?->getOutput() === 'true';
+    }
+
+    public function dirty(): bool
+    {
+        return $this->diff('--stat')->ok()?->getOutput() !== '';
+    }
+
+    public function getBranch(): string
+    {
+        return $this->symbolicRef('--short HEAD')->ok()?->getOutput();
+    }
+
+    public function getTag(): ?string
+    {
+        return $this->describe('--tags')->ok()?->getOutput();
+    }
+
+    public function buildSubmodules(): void
+    {
+        if (empty($submodules = $this->scanSubmodules())) {
+            return;
+        }
+
+        foreach ($submodules as $key => $submodule) {
+            static::$submodules = static::$submodules->add(new self($submodule['name'], $submodule['path']));
+        }
+    }
+
+    public function scanSubmodules(): array
+    {
+        if (empty($vars = config('git.submodule.scan', []))) {
+            return [];
+        }
+
+        $args = "--recursive 'echo \"".urldecode(Arr::query($vars))."\"'";
+
+        $output = $this->submodule('--quiet foreach', $args)->ok()?->getOutput();
+        $output = Str::explodeLines(Str::removeEmptyLines($output));
+
+        foreach ($output as $key => $item) {
+            parse_str($item, $output[$key]);
+        }
+
+        return $output;
+    }
+
+    protected function forward(string $function, array|string $args = '', string $subCommand = null): static
+    {
+        $this->processResult = app('git')->run($this->path, $function, $args, $subCommand, ProcessReturnType::INSTANCE);
+
+        return $this;
+    }
+
+    public function am(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function add(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function archive(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function bisect(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $subCommand, $args);
+    }
+
+    public function branch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function bundle(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function checkout(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function cherryPick(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function clean(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function commit(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function describe(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function diff(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function fetch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function formatPatch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function gc(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function grep(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function init(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function log(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function maintenance(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function merge(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mv(string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function notes(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function pull(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function push(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function rangeDiff(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function rebase(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function reset(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function restore(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function revert(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function rm(array|string $args): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function shortLog(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function show(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function sparseCheckout(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function stash(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function status(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function submodule(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function switch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function tag(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function whatchanged(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function worktree(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function config(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function fastExport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function fastImport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function filterBranch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergetool(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function packRefs(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function prune(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function reflog(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function remote(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function repack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function replace(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function annotate(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function blame(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function bugreport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function countObjects(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function diagnose(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function difftool(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function fsck(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergeTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function rerere(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function showBranch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function verifyCommit(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function verifyTag(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function archimport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function cvsexportcommit(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function cvsimport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function imapSend(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function p4(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function quiltimport(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function requestPull(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function sendEmail(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function svn(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function apply(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function checkoutIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function commitGraph(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function commitTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function hashObject(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function indexPack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergeFile(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergeIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mktag(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mktree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function multiPackIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function packObjects(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function prunePacked(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function readTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function symbolicRef(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function unpackObjects(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function updateIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function updateRef(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function writeTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function catFile(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function cherry(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function diffFiles(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function diffIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function diffTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function forEachRef(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function forEachRepo(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function getTarCommitId(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function lsFiles(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function lsRemote(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function lsTree(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergeBase(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function nameRev(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function packRedundant(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function revList(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function revParse(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function showIndex(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function showRef(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function unpackFile(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function var(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function verifyPack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function fetchPack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function sendPack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function httpFetch(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function httpPush(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function receivePack(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function uploadArchive(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function checkAttr(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function checkIgnore(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function checkMailmap(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function checkRefFormat(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function column(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function credential(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function fmtMergeMsg(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function hook(string $subCommand, array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args, $subCommand);
+    }
+
+    public function interpretTrailers(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function maininfo(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mailsplit(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function mergeOneFile(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function patchId(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+
+    public function stripspace(array|string $args = ''): static
+    {
+        return $this->forward(__FUNCTION__, $args);
+    }
+}
