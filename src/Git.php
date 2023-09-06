@@ -3,13 +3,9 @@
 namespace Aybarsm\Laravel\Git;
 
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
-use Aybarsm\Laravel\Support\Traits\Cacheable;
-use Illuminate\Cache\TaggedCache;
-use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -17,9 +13,6 @@ use Illuminate\Support\Traits\Macroable;
 
 class Git
 {
-    use Cacheable {
-        Cacheable::__construct as private cacheableInit;
-    }
     use Macroable;
 
     protected static array $repos;
@@ -28,25 +21,9 @@ class Git
 
     public function __construct(
         protected $repoProvider,
-        protected array $repoList,
-        protected array $cacheConfig
+        protected array $repoList
     ) {
-        call_user_func_array([$this, 'cacheableInit'], array_merge($this->cacheConfig, ['force' => true]));
-        static::$repos = [];
-        if ($this->cacheEnabled()) {
-            app()->booted(function () {
-                static::$repos = $this->cachePull([]);
-            });
-            app()->terminating(function () {
-                dump(static::$repos);
-                $this->cachePut(static::$repos);
-            });
-        }
-    }
 
-    protected function getCacheStore(): TaggedCache|Repository
-    {
-        return $this->getCacheTag() ? Cache::tags($this->getCacheTag()) : Cache::store();
     }
 
     /**

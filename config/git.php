@@ -1,14 +1,6 @@
 <?php
 
 return [
-    'cache' => [
-        'enabled' => true,
-        // Use default store with null
-        'store' => null,
-        'key' => 'git',
-        'tag' => null,
-        'expires' => 0,
-    ],
     'repos' => [
         'default' => base_path(),
     ],

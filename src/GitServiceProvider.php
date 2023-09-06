@@ -19,21 +19,10 @@ class GitServiceProvider extends ServiceProvider
 
         $gitProvider = config('git.providers.git', \Aybarsm\Laravel\Git\Git::class);
 
-        $cacheConfig = array_merge([
-            'enabled' => true,
-            'store' => null,
-            'key' => 'git',
-            'tag' => null,
-            'expires' => 0,
-        ],
-            config('git.cache', [])
-        );
-
-        $this->app->singleton('git', function ($app) use ($gitProvider, $cacheConfig) {
+        $this->app->singleton('git', function ($app) use ($gitProvider) {
             return new $gitProvider(
                 config('git.providers.gitRepo', \Aybarsm\Laravel\Git\GitRepo::class),
-                config('git.repos', []),
-                $cacheConfig,
+                config('git.repos', [])
             );
         });
     }
