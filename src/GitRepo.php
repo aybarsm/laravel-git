@@ -3,9 +3,10 @@
 namespace Aybarsm\Laravel\Git;
 
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
+use Aybarsm\Laravel\Support\Enums\StrLinesAction;
 use Illuminate\Process\ProcessResult;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Macroable;
 
@@ -29,16 +30,26 @@ class GitRepo
         return $this->processResult?->successful() ? $this : null;
     }
 
-    public function subs(string $search = ''): Collection
+    protected function searchSub(string $search): Collection
     {
-        return empty($subs) ?
-            static::$submodules :
-            static::$submodules->filter(fn ($item) => Str::contains($item->name, $search, true) || Str::contains($item->path, $search, true));
+        if (static::$submodules->isEmpty() && ! ($scanned = $this->scanSubmodules())->isEmpty()) {
+            $this->buildSubmodules($scanned);
+            if (static::$submodules->isEmpty()) {
+                return collect();
+            }
+        }
+
+        return static::$submodules->filter(fn ($item) => Str::contains($item->name, $search, true) || Str::contains($item->path, $search, true));
     }
 
-    public function sub(string $search): mixed
+    public function subs(string $search = ''): Collection
     {
-        return static::$submodules->filter(fn ($item) => Str::contains($item->name, $search, true) || Str::contains($item->path, $search, true))->first();
+        return empty($search) ? static::$submodules : $this->searchSub($search);
+    }
+
+    public function sub(string $search): ?static
+    {
+        return $this->searchSub($search)?->first();
     }
 
     public function getProcessResult(): ?ProcessResult
@@ -48,7 +59,7 @@ class GitRepo
 
     public function getOutput(): ?string
     {
-        return Str::removeEmptyLines($this->processResult?->output());
+        return process_return($this->processResult, ProcessReturnType::OUTPUT);
     }
 
     public function ready(): bool
@@ -71,33 +82,39 @@ class GitRepo
         return $this->describe('--tags')->ok()?->getOutput();
     }
 
-    public function buildSubmodules(): void
+    public function buildSubmodules(Collection $submodules = null): static
     {
-        if (empty($submodules = $this->scanSubmodules())) {
-            return;
+        $submodules = $submodules ?: $this->scanSubmodules();
+
+        if ($submodules->isEmpty()) {
+            return $this;
         }
 
-        foreach ($submodules as $key => $submodule) {
-            static::$submodules = static::$submodules->add(new self($submodule['name'], $submodule['path']));
-        }
+        static::$submodules = collect();
+
+        $submodules->each(function ($item, $key) {
+            if (File::isDirectory($item->path)) {
+                static::$submodules = static::$submodules->add(new self($item->name, $item->path));
+            }
+        });
+
+        return $this;
     }
 
-    public function scanSubmodules(): array
+    public function scanSubmodules(): Collection
     {
-        if (empty($vars = config('git.submodule.scan', []))) {
-            return [];
-        }
-
-        $args = "--recursive 'echo \"".urldecode(Arr::query($vars))."\"'";
+        $args = '\'echo "{\"name\":\"$name\",\"path\":\"$toplevel/$displaypath\"}"\'';
 
         $output = $this->submodule('--quiet foreach', $args)->ok()?->getOutput();
-        $output = Str::explodeLines(Str::removeEmptyLines($output));
 
-        foreach ($output as $key => $item) {
-            parse_str($item, $output[$key]);
-        }
-
-        return $output;
+        return str($output)
+            ->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY)
+            ->whenNotEmpty(
+                fn (Collection $collection): Collection => $collection->transform(
+                    fn ($item, $key): ?object => Str::isJson($item) ? json_decode($item) : null
+                )
+            )
+            ->filter();
     }
 
     protected function forward(string $function, array|string $args = '', string $subCommand = null): static

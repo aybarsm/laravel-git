@@ -3,8 +3,13 @@
 namespace Aybarsm\Laravel\Git;
 
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
+use Aybarsm\Laravel\Support\Traits\Cacheable;
+use Illuminate\Cache\TaggedCache;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -12,28 +17,50 @@ use Illuminate\Support\Traits\Macroable;
 
 class Git
 {
+    use Cacheable {
+        Cacheable::__construct as private cacheableInit;
+    }
     use Macroable;
 
-    protected static array $repos = [];
+    protected static array $repos;
 
     protected ProcessResult $processResult;
 
     public function __construct(
         protected $repoProvider,
-        protected array $repoList
+        protected array $repoList,
+        protected array $cacheConfig
     ) {
-
+        call_user_func_array([$this, 'cacheableInit'], array_merge($this->cacheConfig, ['force' => true]));
+        static::$repos = [];
+        if ($this->cacheEnabled()) {
+            app()->booted(function () {
+                static::$repos = $this->cachePull([]);
+            });
+            app()->terminating(function () {
+                dump(static::$repos);
+                $this->cachePut(static::$repos);
+            });
+        }
     }
 
+    protected function getCacheStore(): TaggedCache|Repository
+    {
+        return $this->getCacheTag() ? Cache::tags($this->getCacheTag()) : Cache::store();
+    }
+
+    /**
+     * @throws \Throwable
+     */
     public function run(string $path, string $command, string|array $args, string $subCommand = null, ProcessReturnType $returnAs = ProcessReturnType::SUCCESSFUL): mixed
     {
-        $command = trim(ltrim(Str::cleanWhitespace(Str::kebab($command)), 'git'));
+        $command = trim(ltrim(str($command)->squish()->kebab()->ltrim('git')->value(), 'git'));
 
         if ($subCommand !== null) {
-            $subCommand = trim(Str::cleanWhitespace($subCommand));
+            $subCommand = trim(Str::squish($subCommand));
             $subCommands = config("git.commands.{$command}.subcommands", []);
             $prefixes = config("git.commands.{$command}.subcommand_prefixes", []);
-            $available = count($prefixes) ? Arr::map(Arr::crossJoin($prefixes, $subCommands), fn ($val, $key) => Str::cleanWhitespace(Arr::join($val, ' '))) : $subCommands;
+            $available = count($prefixes) ? Arr::map(Arr::crossJoin($prefixes, $subCommands), fn ($val, $key) => Str::squish(Arr::join($val, ' '))) : $subCommands;
 
             throw_if(
                 ! in_array($subCommand, $available),
@@ -56,7 +83,7 @@ class Git
     protected function buildArgs(string|array $args): string
     {
         if (is_string($args)) {
-            return Str::cleanWhitespace($args);
+            return Str::squish($args);
         }
 
         $built = [];
@@ -68,7 +95,7 @@ class Git
             };
         }
 
-        return Str::cleanWhitespace(implode(' ', $built));
+        return Str::squish(implode(' ', $built));
     }
 
     /**
@@ -84,17 +111,18 @@ class Git
         return $this;
     }
 
-    public function reLoadRepos(): void
-    {
-        foreach ($this->repoList as $name => $path) {
-            $this->addRepo($name, $path, true);
-            $this->repo($name)->buildSubmodules();
-        }
-    }
-
     public function repo(string $name = 'default')
     {
+        if (! empty($this->repoList) && Arr::exists($this->repoList, $name)) {
+            $this->addRepo($name, $this->repoList[$name], true);
+        }
+
         return static::$repos[$name] ?? null;
+    }
+
+    public function repos(): Collection
+    {
+        return collect(static::$repos);
     }
 
     public function getRepoProvider(): mixed

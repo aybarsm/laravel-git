@@ -17,16 +17,25 @@ class GitServiceProvider extends ServiceProvider
             __DIR__.'/../config/git.php' => config_path('git.php'),
         ], 'config');
 
-        $this->app->singleton('git', function ($app) {
-            $gitProvider = config('git.providers.git', \Aybarsm\Laravel\Git\Git::class);
+        $gitProvider = config('git.providers.git', \Aybarsm\Laravel\Git\Git::class);
 
+        $cacheConfig = array_merge([
+            'enabled' => true,
+            'store' => null,
+            'key' => 'git',
+            'tag' => null,
+            'expires' => 0,
+        ],
+            config('git.cache', [])
+        );
+
+        $this->app->singleton('git', function ($app) use ($gitProvider, $cacheConfig) {
             return new $gitProvider(
                 config('git.providers.gitRepo', \Aybarsm\Laravel\Git\GitRepo::class),
-                config('git.repos')
+                config('git.repos', []),
+                $cacheConfig,
             );
         });
-
-        $this->app->booted(fn ($app) => app('git')->reLoadRepos());
     }
 
     public function boot(): void

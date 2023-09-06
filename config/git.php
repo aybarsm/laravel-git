@@ -1,12 +1,20 @@
 <?php
 
 return [
-    'providers' => [
-        'git' => \Aybarsm\Laravel\Git\Git::class,
-        'gitRepo' => \Aybarsm\Laravel\Git\GitRepo::class,
+    'cache' => [
+        'enabled' => true,
+        // Use default store with null
+        'store' => null,
+        'key' => 'git',
+        'tag' => null,
+        'expires' => 0,
     ],
     'repos' => [
         'default' => base_path(),
+    ],
+    'providers' => [
+        'git' => \Aybarsm\Laravel\Git\Git::class,
+        'gitRepo' => \Aybarsm\Laravel\Git\GitRepo::class,
     ],
     'commands' => [
         'bisect' => [
@@ -51,20 +59,6 @@ return [
         ],
         'hook' => [
             'subcommands' => ['run'],
-        ],
-    ],
-    'submodule' => [
-        'scan' => [
-            'name' => '$name',
-            'path' => '$toplevel/$displaypath',
-            'toplevel' => '$toplevel',
-            'displayPath' => '$displaypath',
-            'smPath' => '$sm_path',
-            'smPathFull' => '$toplevel/.git/modules/$sm_path',
-            'sha1' => '$sha1',
-            'branch' => '$(git symbolic-ref --short HEAD)',
-            'tag' => '$(git describe --tags 2>/dev/null)',
-            'dirty' => '$(git diff --quiet || echo "1")',
         ],
     ],
 ];
