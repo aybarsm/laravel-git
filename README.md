@@ -1,4 +1,4 @@
-# laravel-git
+## What It Does
 Laravel service provider package to manage git repos within or outside the Laravel application
 
 ## Installation
