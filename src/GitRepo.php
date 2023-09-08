@@ -2,21 +2,24 @@
 
 namespace Aybarsm\Laravel\Git;
 
+use Aybarsm\Laravel\Git\Contracts\GitRepoInterface;
 use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
 use Aybarsm\Laravel\Support\Enums\StrLinesAction;
 use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\VarDumper\VarDumper;
 
-class GitRepo
+class GitRepo implements GitRepoInterface
 {
-    use Macroable;
+    use Conditionable, Macroable;
 
     protected static Collection $submodules;
 
-    protected ?ProcessResult $processResult = null;
+    protected ProcessResult $processResult;
 
     public function __construct(
         public readonly string $name,
@@ -25,12 +28,79 @@ class GitRepo
         static::$submodules = collect();
     }
 
-    public function ok(): ?static
+    public static function make(string $name, string $path): static
     {
-        return $this->processResult?->successful() ? $this : null;
+        return new static($name, $path);
     }
 
-    protected function searchSub(string $search): Collection
+    public function dump(): static
+    {
+        VarDumper::dump($this->processResult);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function dd()
+    {
+        $this->dump();
+
+        exit(1);
+    }
+
+    public function result($returnAs = ProcessReturnType::INSTANCE): bool|object|string
+    {
+        return process_return($this->processResult, $returnAs);
+    }
+
+    public function whenSuccessful(callable $callback, callable $default = null): static
+    {
+        return $this->when(
+            fn (): bool => $this->result(ProcessReturnType::SUCCESSFUL),
+            fn (): static => call_user_func($callback, $this),
+            fn (): static => call_user_func($default, $this),
+        );
+    }
+
+    public function whenFailed(callable $callback, callable $default = null): static
+    {
+        return $this->when(
+            fn (): bool => $this->result(ProcessReturnType::FAILED),
+            fn (): static => call_user_func($callback, $this),
+            fn (): static => call_user_func($default, $this),
+        );
+    }
+
+    public function isReady(): bool
+    {
+        return $this->revParse('--is-inside-work-tree')->result(ProcessReturnType::OUTPUT) === 'true';
+    }
+
+    public function isDirty(): bool
+    {
+        return $this->diff('--stat')->result(ProcessReturnType::OUTPUT) !== '';
+    }
+
+    public function getBranch(): string
+    {
+        return $this->symbolicRef('--short HEAD')->result(ProcessReturnType::OUTPUT);
+    }
+
+    public function getTag(): ?string
+    {
+        $tag = $this->describe('--tags')->result(ProcessReturnType::OUTPUT);
+
+        return empty($tag) ? null : $tag;
+    }
+
+    public function getTags(): Collection
+    {
+        return str($this->tag()->result(ProcessReturnType::OUTPUT))->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY);
+    }
+
+    public function searchSub(string $search): Collection
     {
         if (static::$submodules->isEmpty() && ! ($scanned = $this->scanSubmodules())->isEmpty()) {
             $this->buildSubmodules($scanned);
@@ -50,36 +120,6 @@ class GitRepo
     public function sub(string $search): ?static
     {
         return $this->searchSub($search)?->first();
-    }
-
-    public function getProcessResult(): ?ProcessResult
-    {
-        return $this->processResult;
-    }
-
-    public function getOutput(): ?string
-    {
-        return process_return($this->processResult, ProcessReturnType::OUTPUT);
-    }
-
-    public function ready(): bool
-    {
-        return $this->revParse('--is-inside-work-tree')->ok()?->getOutput() === 'true';
-    }
-
-    public function dirty(): bool
-    {
-        return $this->diff('--stat')->ok()?->getOutput() !== '';
-    }
-
-    public function getBranch(): string
-    {
-        return $this->symbolicRef('--short HEAD')->ok()?->getOutput();
-    }
-
-    public function getTag(): ?string
-    {
-        return $this->describe('--tags')->ok()?->getOutput();
     }
 
     public function buildSubmodules(Collection $submodules = null): static
@@ -103,11 +143,21 @@ class GitRepo
 
     public function scanSubmodules(): Collection
     {
-        $args = '\'echo "{\"name\":\"$name\",\"path\":\"$toplevel/$displaypath\"}"\'';
+        $args = '\'echo "{\"name\":\"$name\",\"path\":\"$toplevel/$displaypath\"},"\'';
 
-        $output = $this->submodule('--quiet foreach', $args)->ok()?->getOutput();
+        if ($this->submodule('--quiet foreach', $args)->result(ProcessReturnType::FAILED)) {
+            return collect();
+        }
 
-        return str($output)
+        $output = str($this->result(ProcessReturnType::OUTPUT))->squish()->trim(',')->start('[')->finish(']')->value();
+
+        return collect(Str::isJson($output) ? json_decode($output) : []);
+
+        dump($output);
+        dump(Str::isJson($output));
+
+        return collect();
+        $subs = str($output)
             ->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY)
             ->whenNotEmpty(
                 fn (Collection $collection): Collection => $collection->transform(
@@ -115,9 +165,13 @@ class GitRepo
                 )
             )
             ->filter();
+
+        //        dump($subs);
+        //        return $subs;
+        return collect();
     }
 
-    protected function forward(string $function, array|string $args = '', string $subCommand = null): static
+    public function forward(string $function, array|string $args = '', string $subCommand = null): static
     {
         $this->processResult = app('git')->run($this->path, $function, $args, $subCommand, ProcessReturnType::INSTANCE);
 

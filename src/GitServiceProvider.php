@@ -2,9 +2,11 @@
 
 namespace Aybarsm\Laravel\Git;
 
+use Aybarsm\Laravel\Git\Contracts\GitInterface;
+use Illuminate\Contracts\Support\DeferrableProvider;
 use Illuminate\Support\ServiceProvider;
 
-class GitServiceProvider extends ServiceProvider
+class GitServiceProvider extends ServiceProvider implements DeferrableProvider
 {
     public function register(): void
     {
@@ -17,17 +19,22 @@ class GitServiceProvider extends ServiceProvider
             __DIR__.'/../config/git.php' => config_path('git.php'),
         ], 'config');
 
-        $gitProvider = config('git.providers.git', \Aybarsm\Laravel\Git\Git::class);
+        $gitProvider = sconfig('git.concretes.Git', \Aybarsm\Laravel\Git\Git::class);
 
-        $this->app->singleton('git', function ($app) use ($gitProvider) {
+        $this->app->singleton(GitInterface::class, function ($app) use ($gitProvider) {
             return new $gitProvider(
-                config('git.providers.gitRepo', \Aybarsm\Laravel\Git\GitRepo::class),
-                config('git.repos', [])
+                sconfig('git.concretes.GitRepo', \Aybarsm\Laravel\Git\GitRepo::class),
+                sconfig('git.repos', [])
             );
         });
+
+        $this->app->alias(GitInterface::class, 'git');
     }
 
-    public function boot(): void
+    public function provides(): array
     {
+        return [
+            GitInterface::class, 'git',
+        ];
     }
 }

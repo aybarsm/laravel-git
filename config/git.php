@@ -4,9 +4,9 @@ return [
     'repos' => [
         'default' => base_path(),
     ],
-    'providers' => [
-        'git' => \Aybarsm\Laravel\Git\Git::class,
-        'gitRepo' => \Aybarsm\Laravel\Git\GitRepo::class,
+    'concretes' => [
+        'Git' => \Aybarsm\Laravel\Git\Git::class,
+        'GitRepo' => \Aybarsm\Laravel\Git\GitRepo::class,
     ],
     'commands' => [
         'bisect' => [

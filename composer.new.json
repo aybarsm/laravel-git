@@ -23,7 +23,7 @@
         "illuminate/contracts": "^10.0",
         "illuminate/support": "^10.0",
         "illuminate/process": "^10.0",
-        "aybarsm/laravel-extended-support": "^1.0.4"
+        "aybarsm/laravel-extended-support": "^1.0.3"
     },
     "require-dev": {
         "laravel/pint": "^1.12"
