@@ -1,6 +1,6 @@
 {
     "name": "aybarsm/laravel-git",
-    "description": "Laravel service provider package to manage git repo within the Laravel application",
+    "description": "Laravel service provider package to manage git repos within or outside the Laravel application",
     "type": "library",
     "license": "MIT",
     "keywords": [
