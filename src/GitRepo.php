@@ -153,9 +153,6 @@ class GitRepo implements GitRepoInterface
 
         return collect(Str::isJson($output) ? json_decode($output) : []);
 
-        dump($output);
-        dump(Str::isJson($output));
-
         return collect();
         $subs = str($output)
             ->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY)
@@ -166,8 +163,6 @@ class GitRepo implements GitRepoInterface
             )
             ->filter();
 
-        //        dump($subs);
-        //        return $subs;
         return collect();
     }
 
