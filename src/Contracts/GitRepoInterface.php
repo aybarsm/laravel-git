@@ -23,8 +23,6 @@ interface GitRepoInterface
 
     public function whenFailed(callable $callback, callable $default = null): static;
 
-    public function searchSub(string $search): Collection;
-
     public function subs(string $search = ''): Collection;
 
     public function sub(string $search): ?static;
@@ -38,12 +36,6 @@ interface GitRepoInterface
     public function getTag(): ?string;
 
     public function getTags(): Collection;
-
-    public function buildSubmodules(Collection $submodules = null): static;
-
-    public function scanSubmodules(): Collection;
-
-    public function forward(string $function, array|string $args = '', string $subCommand = null): static;
 
     public function am(array|string $args = ''): static;
 

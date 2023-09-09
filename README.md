@@ -1,5 +1,5 @@
 ## What It Does
-Laravel service provider package to manage git repos within or outside the Laravel application
+This package is crafted for both Laravel and Laravel Zero developers aiming to integrate and manage Git repositories seamlessly within their applications. Whether you're looking to control a repository residing within your application or interact with external ones, this service provider simplifies those interactions. Built on the foundation of Laravel's service container, it provides a straightforward and efficient approach to manage your Git operations, keeping your application connected and in sync with your versioning needs.
 
 ## Installation
 
@@ -89,7 +89,7 @@ use Aybarsm\Laravel\Support\Enums\ProcessReturnType;
 $git = git();
 $repo = $git->repo(); // Returns the default pre-defined repo
 // or you can directly reach the repo
-// $repo = gitRepo();
+// $repo = gitRepo('default');
 
 if ($repo->isReady() && $repo->isDirty()){
     // arguments accepts strings or cli type arrays like arg, --arg=value, -arg value or -arg
@@ -115,4 +115,7 @@ if ($repo->isReady() && $repo->isDirty()){
             }
     );
 }
+
+// You can easily create individual GitRepo instances by
+$newRepo = GitRepo::make('someName', '/some/path');
 ```

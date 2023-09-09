@@ -100,7 +100,7 @@ class GitRepo implements GitRepoInterface
         return str($this->tag()->result(ProcessReturnType::OUTPUT))->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY);
     }
 
-    public function searchSub(string $search): Collection
+    protected function searchSub(string $search): Collection
     {
         if (static::$submodules->isEmpty() && ! ($scanned = $this->scanSubmodules())->isEmpty()) {
             $this->buildSubmodules($scanned);
@@ -122,7 +122,7 @@ class GitRepo implements GitRepoInterface
         return $this->searchSub($search)?->first();
     }
 
-    public function buildSubmodules(Collection $submodules = null): static
+    protected function buildSubmodules(Collection $submodules = null): static
     {
         $submodules = $submodules ?: $this->scanSubmodules();
 
@@ -141,7 +141,7 @@ class GitRepo implements GitRepoInterface
         return $this;
     }
 
-    public function scanSubmodules(): Collection
+    protected function scanSubmodules(): Collection
     {
         $args = '\'echo "{\"name\":\"$name\",\"path\":\"$toplevel/$displaypath\"},"\'';
 
@@ -152,21 +152,9 @@ class GitRepo implements GitRepoInterface
         $output = str($this->result(ProcessReturnType::OUTPUT))->squish()->trim(',')->start('[')->finish(']')->value();
 
         return collect(Str::isJson($output) ? json_decode($output) : []);
-
-        return collect();
-        $subs = str($output)
-            ->lines(StrLinesAction::SPLIT, -1, PREG_SPLIT_NO_EMPTY)
-            ->whenNotEmpty(
-                fn (Collection $collection): Collection => $collection->transform(
-                    fn ($item, $key): ?object => Str::isJson($item) ? json_decode($item) : null
-                )
-            )
-            ->filter();
-
-        return collect();
     }
 
-    public function forward(string $function, array|string $args = '', string $subCommand = null): static
+    protected function forward(string $function, array|string $args = '', string $subCommand = null): static
     {
         $this->processResult = app('git')->run($this->path, $function, $args, $subCommand, ProcessReturnType::INSTANCE);
 
